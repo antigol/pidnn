@@ -3,12 +3,13 @@ import numpy as np
 from math import exp
 
 class PIDsim:
-    def __init__(self, inertia, dissipation, power, int_time, consign_variation):
+    def __init__(self, inertia, dissipation, power, int_time, consign_variation, consign_time_step):
         self.inertia = exp(-1 / inertia)
         self.dissipation = exp(-1 / dissipation)
         self.power = power
         self.int_time = exp(-1 / int_time)
         self.consign_variation = consign_variation
+        self.consign_pstep = 1 / consign_time_step
 
         self.current = 0
         self.consign = 0
@@ -36,7 +37,7 @@ class PIDsim:
 
         reward = -abs(self.current - self.consign)
         done = reward < -10
-        reward = np.clip(reward, -1, 1)
+        # reward = np.clip(reward, -1, 1)
         return state, reward, done
 
     def step_heater(self, action):
@@ -45,6 +46,6 @@ class PIDsim:
         self.current = self.inertia * self.current + (1 - self.inertia) * self.instant
 
     def step_consign(self):
-        self.consign += self.consign_variation * np.random.normal()
-        if self.consign < 0:
-            self.consign = 0
+        if np.random.rand() < self.consign_pstep:
+            self.consign += self.consign_variation * np.random.normal()
+        self.consign = np.clip(self.consign, 0, self.power / (1 - self.dissipation))

@@ -1,5 +1,6 @@
 #pylint: disable=R,C,E1101
 import argparse
+from math import exp
 import numpy as np
 from itertools import count
 import signal
@@ -39,14 +40,13 @@ class InterruptHandler:
 parser = argparse.ArgumentParser(description='PIDNN PID by neural network')
 parser.add_argument('--gamma_time', type=float, default=100, metavar='G',
                     help='discount time (default: 100)')
-parser.add_argument('--log_interval', type=int, default=10, metavar='N',
-                    help='interval between training status logs (default: 10)')
 parser.add_argument('--inertia', type=float, default=20, metavar='T')
 parser.add_argument('--dissipation', type=float, default=100, metavar='T',
                     help='dissipation')
 parser.add_argument('--power', type=float, default=0.1, metavar='P')
 parser.add_argument('--int_time', type=float, default=100, metavar='T')
-parser.add_argument('--consign_variation', type=float, default=0.01, metavar='E')
+parser.add_argument('--consign_variation', type=float, default=2, metavar='E')
+parser.add_argument('--consign_time_step', type=float, default=1000, metavar='T')
 parser.add_argument('--learning_rate', type=float, default=0.01, metavar='lr')
 
 args = parser.parse_args()
@@ -82,19 +82,29 @@ def select_action(state):
     policy.saved_actions.append(action)
     return action.data
 
-def finish_episode():
+def learn():
+    if len(policy.rewards) < 200:
+        return
+
     R = 0
     rewards = []
     for r in policy.rewards[::-1]:
-        R = r + (1 - 1 / args.gamma_time) * R
+        R = r + exp(-1 / args.gamma_time) * R
         rewards.insert(0, R)
+
+    rewards = rewards[:100]
+
     rewards = torch.Tensor(rewards)
     rewards = (rewards - rewards.mean()) / (rewards.std() + np.finfo(np.float32).eps)
-    for action, r in zip(policy.saved_actions, rewards):
+    for action, r in zip(policy.saved_actions[:100], rewards):
         action.reinforce(r)
     optimizer.zero_grad()
-    autograd.backward(policy.saved_actions, [None for _ in policy.saved_actions])
+    autograd.backward(policy.saved_actions[:100], [None for _ in policy.saved_actions[:100]])
     optimizer.step()
+    del policy.rewards[:100]
+    del policy.saved_actions[:100]
+
+def finish_episode():
     del policy.rewards[:]
     del policy.saved_actions[:]
 
@@ -105,36 +115,43 @@ def main():
     fig = plt.figure()
     fig.show()
 
-    env = fake.PIDsim(inertia=args.inertia, dissipation=args.dissipation, power=args.power, int_time=args.int_time, consign_variation=args.consign_variation)
+    env = fake.PIDsim(inertia=args.inertia, dissipation=args.dissipation, power=args.power, int_time=args.int_time, consign_variation=args.consign_variation, consign_time_step=args.consign_time_step)
 
     with InterruptHandler() as h:
         for i_episode in count(0):
             state = env.reset()
 
-            render = h.catch()
-            consigns = []
-            currents = []
-            for i in range(2000): # Don't infinite loop while learning
+            render = 0
+            for i in range(100000): # Don't infinite loop while learning
                 action = select_action(state)
                 state, reward, done = env.step(action[0,0])
 
-                if render:
-                    if h.catch():
+                if h.catch():
+                    if render > 0:
                         sys.exit(0)
+                    render = 5000
+                    time = []
+                    consigns = []
+                    currents = []
 
-                    consigns.append(env.consign)
-                    currents.append(env.current)
+                if render > 0:
+                    render -= 1
 
-                    if i % 50 == 0:
+                    if i % 10 == 0:
+                        time.append(i)
+                        consigns.append(env.consign)
+                        currents.append(env.current)
                         fig = plt.figure(fig.number)
                         plt.cla()
-                        plt.plot(consigns, 'r-')
-                        plt.plot(currents, 'k-')
+                        plt.plot(time, consigns, 'r-')
+                        plt.plot(time, currents, 'k-')
                         plt.xlabel('time')
                         plt.ylabel('value')
                         fig.canvas.draw()
 
                 policy.rewards.append(reward)
+
+                learn()
 
                 if done:
                     break
@@ -143,8 +160,7 @@ def main():
 
             finish_episode()
 
-            if i_episode % args.log_interval == 0:
-                print('Episode {} mean reward {:.2}'.format(i_episode, mean_reward))
+            print('Episode {} mean reward {:.2}'.format(i_episode, mean_reward))
 
 if __name__ == "__main__":
     main()

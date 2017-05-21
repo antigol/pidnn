@@ -37,17 +37,17 @@ class InterruptHandler:
         return False
 
 parser = argparse.ArgumentParser(description='PIDNN PID by neural network')
-parser.add_argument('--gamma', type=float, default=0.99, metavar='G',
-                    help='discount factor (default: 0.99)')
+parser.add_argument('--gamma_time', type=float, default=100, metavar='G',
+                    help='discount time (default: 100)')
 parser.add_argument('--log_interval', type=int, default=10, metavar='N',
                     help='interval between training status logs (default: 10)')
-parser.add_argument('--inertia', type=float, default=0.95, metavar='N',
-                    help='inertia')
-parser.add_argument('--dissipation', type=float, default=0.01, metavar='N',
+parser.add_argument('--inertia', type=float, default=20, metavar='T')
+parser.add_argument('--dissipation', type=float, default=100, metavar='T',
                     help='dissipation')
-parser.add_argument('--power', type=float, default=0.1)
-parser.add_argument('--int_time', type=float, default=100)
-parser.add_argument('--consign_variation', type=float, default=0.01)
+parser.add_argument('--power', type=float, default=0.1, metavar='P')
+parser.add_argument('--int_time', type=float, default=100, metavar='T')
+parser.add_argument('--consign_variation', type=float, default=0.01, metavar='E')
+parser.add_argument('--learning_rate', type=float, default=0.01, metavar='lr')
 
 args = parser.parse_args()
 
@@ -72,7 +72,7 @@ class Policy(nn.Module):
 
 policy = Policy()
 policy.train()
-optimizer = optim.Adam(policy.parameters(), lr=1e-2)
+optimizer = optim.Adam(policy.parameters(), lr=args.learning_rate)
 
 def select_action(state):
     state = torch.from_numpy(state).float().unsqueeze(0)
@@ -85,7 +85,7 @@ def finish_episode():
     R = 0
     rewards = []
     for r in policy.rewards[::-1]:
-        R = r + args.gamma * R
+        R = r + (1 - 1 / args.gamma_time) * R
         rewards.insert(0, R)
     rewards = torch.Tensor(rewards)
     rewards = (rewards - rewards.mean()) / (rewards.std() + np.finfo(np.float32).eps)
@@ -113,7 +113,7 @@ def main():
             render = h.catch()
             consigns = []
             currents = []
-            for i in range(1000): # Don't infinite loop while learning
+            for i in range(2000): # Don't infinite loop while learning
                 action = select_action(state)
                 state, reward, done = env.step(action[0,0])
 
@@ -124,7 +124,7 @@ def main():
                     consigns.append(env.consign)
                     currents.append(env.current)
 
-                    if i % 10 == 0:
+                    if i % 50 == 0:
                         fig = plt.figure(fig.number)
                         plt.cla()
                         plt.plot(consigns, 'r-')

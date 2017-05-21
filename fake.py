@@ -41,9 +41,9 @@ class PIDsim:
         return state, reward, done
 
     def step_heater(self, action):
-        self.instant *= 1 - self.dissipation
+        self.instant *= 1 - 1 / self.dissipation
         self.instant += self.power * action
-        self.current = self.inertia * self.current + (1 - self.inertia) * self.instant
+        self.current = (1 - 1 / self.inertia) * self.current + self.instant / self.inertia
 
     def step_consign(self):
         self.consign += self.consign_variation * np.random.normal()

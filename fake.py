@@ -4,10 +4,10 @@ from math import exp
 
 class PIDsim:
     def __init__(self, inertia, dissipation, power, int_time, consign_variation):
-        self.inertia = inertia
-        self.dissipation = dissipation
+        self.inertia = exp(-1 / inertia)
+        self.dissipation = exp(-1 / dissipation)
         self.power = power
-        self.int_time = int_time
+        self.int_time = exp(-1 / int_time)
         self.consign_variation = consign_variation
 
         self.current = 0
@@ -29,21 +29,20 @@ class PIDsim:
         self.step_consign()
 
         error = self.current - self.consign
-        self.integral = (1 - 1 / self.int_time) * self.integral + error / self.int_time
+        self.integral = self.int_time * self.integral + (1 - self.int_time) * error
         differential = error - self.lasterror
         self.lasterror = error
         state = np.array([error, self.integral, differential])
-        state = np.clip(state, -1, 1)
 
         reward = -abs(self.current - self.consign)
         done = reward < -10
-        reward = np.clip(reward, -2, 2)
+        reward = np.clip(reward, -1, 1)
         return state, reward, done
 
     def step_heater(self, action):
-        self.instant *= 1 - 1 / self.dissipation
+        self.instant *= self.dissipation
         self.instant += self.power * action
-        self.current = (1 - 1 / self.inertia) * self.current + self.instant / self.inertia
+        self.current = self.inertia * self.current + (1 - self.inertia) * self.instant
 
     def step_consign(self):
         self.consign += self.consign_variation * np.random.normal()

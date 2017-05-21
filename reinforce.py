@@ -75,6 +75,7 @@ policy.train()
 optimizer = optim.Adam(policy.parameters(), lr=args.learning_rate)
 
 def select_action(state):
+    state = np.clip(state, -1, 1)
     state = torch.from_numpy(state).float().unsqueeze(0)
     probs = policy(Variable(state))
     action = probs.bernoulli()

@@ -16,9 +16,10 @@ class PIDsim:
         self.integral = 0
         self.lasterror = 0
         self.instant = 0
+        self.intermediate = 0
 
     def reset(self):
-        self.instant = self.current = np.random.uniform(10)
+        self.instant = self.intermediate = self.current = np.random.uniform(10)
         self.consign = np.random.uniform(10)
         self.lasterror = self.current - self.consign
         self.integral = self.lasterror
@@ -36,16 +37,18 @@ class PIDsim:
         state = np.array([error, self.integral, differential])
 
         reward = -abs(self.current - self.consign)
-        done = reward < -10
+        done = abs(self.integral) > 10
         # reward = np.clip(reward, -1, 1)
         return state, reward, done
 
     def step_heater(self, action):
         self.instant *= self.dissipation
         self.instant += self.power * action
-        self.current = self.inertia * self.current + (1 - self.inertia) * self.instant
+        self.intermediate = self.inertia * self.intermediate + (1 - self.inertia) * self.instant
+        self.current = self.inertia * self.current + (1 - self.inertia) * self.intermediate
 
     def step_consign(self):
         if np.random.rand() < self.consign_pstep:
-            self.consign += self.consign_variation * np.random.normal()
+            self.consign = np.random.uniform(10)
+        self.consign += self.consign_variation * np.random.normal()
         self.consign = np.clip(self.consign, 0, self.power / (1 - self.dissipation))

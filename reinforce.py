@@ -5,6 +5,7 @@ import numpy as np
 from itertools import count
 import signal
 import sys
+import os
 
 import torch
 import torch.nn as nn
@@ -45,7 +46,7 @@ parser.add_argument('--dissipation', type=float, default=100, metavar='T',
                     help='dissipation')
 parser.add_argument('--power', type=float, default=0.1, metavar='P')
 parser.add_argument('--int_time', type=float, default=100, metavar='T')
-parser.add_argument('--consign_variation', type=float, default=2, metavar='E')
+parser.add_argument('--consign_variation', type=float, default=1e-2, metavar='E')
 parser.add_argument('--consign_time_step', type=float, default=1000, metavar='T')
 parser.add_argument('--learning_rate', type=float, default=0.01, metavar='lr')
 
@@ -64,9 +65,9 @@ class Policy(nn.Module):
 
     def forward(self, x): #pylint: disable=W
         x = self.affine1(x)
-        x = F.relu(x)
+        x = F.sigmoid(x)
         x = self.affine2(x)
-        x = F.relu(x)
+        x = F.sigmoid(x)
         x = self.affine3(x)
         return F.sigmoid(x)
 
@@ -112,6 +113,9 @@ def main():
     import fake
     import matplotlib.pyplot as plt
 
+    if os.path.isfile('cnn.pkl'):
+        policy.load_state_dict(torch.load('cnn.pkl'))
+
     fig = plt.figure()
     fig.show()
 
@@ -128,6 +132,7 @@ def main():
 
                 if h.catch():
                     if render > 0:
+                        torch.save(policy.state_dict(), 'cnn.pkl')
                         sys.exit(0)
                     render = 5000
                     time = []
@@ -136,11 +141,11 @@ def main():
 
                 if render > 0:
                     render -= 1
+                    time.append(i)
+                    consigns.append(env.consign)
+                    currents.append(env.current)
 
                     if i % 10 == 0:
-                        time.append(i)
-                        consigns.append(env.consign)
-                        currents.append(env.current)
                         fig = plt.figure(fig.number)
                         plt.cla()
                         plt.plot(time, consigns, 'r-')

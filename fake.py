@@ -37,7 +37,7 @@ class PIDsim:
         state = np.array([error, self.integral, differential])
 
         reward = -abs(self.current - self.consign)
-        done = abs(self.integral) > 10
+        done = abs(self.integral) > 20
         # reward = np.clip(reward, -1, 1)
         return state, reward, done
 

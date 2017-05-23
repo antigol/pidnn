@@ -47,6 +47,8 @@ parser.add_argument('--power', type=float, default=0.1, metavar='P')
 parser.add_argument('--consign_variation', type=float, default=1e-2, metavar='E')
 parser.add_argument('--consign_time_step', type=float, default=1000, metavar='T')
 parser.add_argument('--learning_rate', type=float, default=0.01, metavar='lr')
+parser.add_argument('--render_time', type=int, default=1000, metavar='T')
+parser.add_argument('--memory_time', type=int, default=10, metavar='T')
 
 args = parser.parse_args()
 
@@ -54,7 +56,7 @@ class Policy(nn.Module):
     def __init__(self):
         super(Policy, self).__init__()
 
-        self.affine1 = nn.Linear(3, 16)
+        self.affine1 = nn.Linear(4, 16)
         self.affine2 = nn.Linear(16, 16)
         self.affine3 = nn.Linear(16, 1)
 
@@ -74,7 +76,6 @@ policy.train()
 optimizer = optim.Adam(policy.parameters(), lr=args.learning_rate)
 
 def select_action(state):
-    # return 1 if state[0] < 0 else 0
     state = np.clip(state, -1, 1)
     state = torch.from_numpy(state).float().unsqueeze(0)
     probs = policy(Variable(state))
@@ -113,9 +114,11 @@ def finish_episode():
 def main():
     import fake
     import matplotlib.pyplot as plt
+    import IPython
 
     if os.path.isfile('cnn.pkl'):
         policy.load_state_dict(torch.load('cnn.pkl'))
+        IPython.embed()
 
     fig = plt.figure()
     fig.show()
@@ -126,16 +129,21 @@ def main():
         for i_episode in count(0):
             state = env.reset()
 
+            memory = 0
+            state = np.concatenate((state, [memory]))
+
             render = 0
             for i in range(50000): # Don't infinite loop while learning
                 action = select_action(state)
+                memory = (1 - exp(-1 / args.memory_time)) * memory + exp(-1 / args.memory_time) * action
                 state, reward, done = env.step(action)
+                state = np.concatenate((state, [memory]))
 
                 if h.catch():
                     if render > 0:
                         torch.save(policy.state_dict(), 'cnn.pkl')
                         sys.exit(0)
-                    render = 1000
+                    render = args.render_time
                     time = []
                     consigns = []
                     currents = []
